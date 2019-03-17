@@ -1,3 +1,5 @@
+Tools for processing, inversion, and interpretation of Airborne ElectroMagnetics
+
 This is the public repository for the  Airborne Electromagnetic Inversion toolbox "aempy" (python3 version), which was originally developed at DIAS starting with the project "Spatially constrained Bayesian inversion of frequency- and time-domain electromagnetic data from the Tellus projects", funded by the geological survey of Ireland GSI (2015-sc-004), It is distributed under the GNU GENERAL PUBLIC LICENSE Version 3.
                        
 Please keep in mind that this is an experimental software, and may contain errors. Use at your own risk! However, we will frequently update the repository correcting bugs, and adding additional functionality.                 
