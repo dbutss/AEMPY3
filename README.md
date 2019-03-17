@@ -1,4 +1,4 @@
-Tools for processing, inversion, and interpretation of Airborne ElectroMagnetics
+# Tools for processing, inversion, and interpretation of Airborne ElectroMagnetics
 
 This is the public repository for the  Airborne Electromagnetic Inversion toolbox "aempy" (python3 version), which was originally developed at DIAS starting with the project "Spatially constrained Bayesian inversion of frequency- and time-domain electromagnetic data from the Tellus projects", funded by the geological survey of Ireland GSI (2015-sc-004), It is distributed under the GNU GENERAL PUBLIC LICENSE Version 3.
                        
@@ -6,32 +6,32 @@ Please keep in mind that this is an experimental software, and may contain error
  
 This repository contains the following subdirectories:
 
- - 	core
+ - 	**core**
 	This directory contains the Fortran 90 source code for the computational
 	core run by the Python toolbox. Currently it contains wrappers for the two
 	systems used in Tellus: GTK4  and CGG Genesis. the numerics is derived from 
 	the AMIRA/CSIRO AirBeo software. Wrappers for GEOTEM are work in progress.
 	
- -	doc
+ -	**doc**
  	Doumentation for the toolbox, and some useful documentation for python, 
  	including the most important extensions, numpy, scipy, and matplotlib 
  	
- -	modules
+ -	**modules**
  	Contains the modules aemprocs.py and invprocs.py, which are called from the 
  	Python scripts run for different tasks of AEM inversion
  	
- - 	scripts
+ - 	**scripts**
  	Contains the scripts  for preprocessing, visualization, and one-dimensional inversion of 
  	AEM data
  	
- - 	tutorial
+ - 	**tutorial**
  	Contains several scripts and data demonstratinmg explaining the typical 
  	work flow using the toolbox.      	 
 
  
 Get your working copy via git from the command line:
 
- git clone https://github.com/volkerrath/AEMPY3/
+ * git clone https://github.com/volkerrath/AEMPY3/ *
 
 Enjoy!
 
