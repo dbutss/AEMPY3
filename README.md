@@ -31,7 +31,7 @@ This repository contains the following subdirectories:
  
 Get your working copy via git from the command line:
 
- * git clone https://github.com/volkerrath/AEMPY3/ *
+_git clone https://github.com/volkerrath/AEMPY3/_
 
 Enjoy!
 
