@@ -1,0 +1,1086 @@
+!   PROGRAM ArjunAir    Version 7.0.5    26 September 2007    Language: ANSI Standard Fortran 95
+!   ======= ========    =============    =================    ----------------------------------
+!
+!             Developed by: Glenn Wilson, Art Raiche and Fred Sugeng
+!                      for: AMIRA Project P223F
+!
+!===========================================================================!
+!                                                                           !
+!                             Program Description                           !
+!                                                                           !
+!===========================================================================!
+!
+!
+!   Modelling
+!   ---------
+!
+!   ArjunAir models the 3D airborne EM response of a general heterogeneous 2D
+!   structure (cross strike section). This section lies in the vertical plane
+!   under the flight path. The lithology is allowed to vary in this plane
+!   (cross strike) but for purposes of 3D simulation, it is constant along
+!   strike transverse to the flight line. ArjunAir is capable of modelling
+!   high contrasts accurately.
+!
+!   The airborne system is modelled as a magnetic dipole transmitter with one
+!   magnetic dipole receiver.  The receiver offset and orientation can vary
+!   as a function of frequency in frequency domain or as a function of
+!   position in time domain.  Up to three components are computed: vertical,
+!   horizontal in-line, and horizontal transverse. The transmitter dipole can
+!   be either vertical, horizontal, or tilted at any angle in the flight path
+!   of the plane.
+!
+!   Frequency-domain solutions are obtained by transformation into a mixed
+!   spatial-Fourier domain (x,Ky,z,f) where Ky is the wavenumber corresponding
+!   to the strike direction. In this domain, an isoparametric finite-element
+!   method is used to solve a coupled system of differential equations for the
+!   along-strike components of the magnetic and electric fields. The global
+!   matrix equation is solved using the frontal solution method. The vertical
+!   and transverse strike magnetic field components are then computed in this
+!   domain.  After obtaining solutions for 21 wavenumber values, the three
+!   magnetic field components are then transformed into the (x,y,z,f) domain.
+!
+!   Time-domain responses are obtained from frequency-domain responses computed
+!   at 6 points / decade from 10 Hz to 100 KHz. and at 3 points / decade
+!   from 1 Hz to 10 Hz.  After extrapolating the step response back to DC, the
+!   imaginary component is cubic-splined over the spectrum from DC to 100 KHz.
+!   A specially designed 15 point / decade Hankel filter is used to compute the
+!   time-domain response out to 5 complete cycles.  It is then folded and
+!   convolved with the transmitter system waveform.
+!  
+!   On-time and off-time channels are permitted.  The on-time channels work well
+!   for B field but on-time dB/dt modelling requires the application of the
+!   stripping algorithms.
+!
+!   In time domain, the user can specify the source in terms of either current
+!   input or the receiver calibration waveform.  In each case, this is
+!   converted to the effective dipole dI/dt.  When the calibration waveform is
+!   used as the source input, the Tx - Rx geometry is used to compute the
+!   effective dipolar dI/dt source.  This includes the effect of the airframe
+!   currents as well as the direct source input.
+!
+!   In time-domain modelling, ArjunAir has a feature that allows the effects of
+!   different waveforms, different channels and conversions between B & dB/dt
+!   to be tested with negligible additional computation as long as the system
+!   geometry, flight path and model are kept constant.  This is accomplished
+!   by using the ArjunAir.frq file in which all of the frequency-domain
+!   computations have been saved.
+!
+!   Inversion
+!   ---------
+!
+!   ArjunAir inverts for the cell resistivities of the user-defined mesh.
+!   The inherently non-linear inversion is performed as a number of linearised
+!   steps based on based on a damped singular value decomposition of the
+!   sensitivity matrix.  The first step in constructing this matrix is the use
+!   of a reciprocity method to compute the first-order derivatives that comprise
+!   the basic Jacobian.  To improve the condition and dynamic balance , these
+!   derivatives are normalised by the cell conductivities, which is equivalent
+!   to differentiating with respect to log resistivity.  The sensitivity matrix
+!   is then constructed by normalising each row by by the average absolute data
+!   value for the frequency or time channel corresponding to that row.
+!
+!   ArjunAir allows the user to constrain the inversion through the application
+!   of any combination of friction or buffered-bounds constraints.
+!
+!
+!   Mesh Design
+!   ===========
+!
+!   Mesh design is a compromise between accuracy and runtime.  Runtime increases
+!   as the cube of the number of nodes.  Accurate mesh design depends upon the
+!   resistivities and geometries of the structures.  Based on a number of tests
+!   against known solutions the following is offered as a guide.
+!
+!   For towed bird time-domain system start with a mesh 2 km along flight path
+!   using 50 columns of 40 m width  For frequency-domain HEM systems, start with
+!   a 1 k m long mesh using 40 columns of 25 m width.
+!  
+!   In each case, the first four rows should be of thickness 12 m.  From there
+!   on down, use a 20 m thick row and increase thickness of each subsequent row
+!   at 6 percent down to a depth of 800 m for time-domain and 500 m for FD HEM
+!   modelling.
+!
+!   Adjust row thicknesses and column widths to accommodate the model.  Columns
+!   can be added near severe conductivity contrasts to widths of 20 or even
+!   10 m.  The number of nodes in the model can be kept the same by eliminating
+!   columns near the left and right edges and then readjusting the column widths
+!   using exponential interpolation.
+!
+!   Although the number of cells can probably be kept constant, for very
+!   resistive hosts, the wavelengths (skin depths) will be larger so that the
+!   mesh will need to be extended but the cells can be made proportionally
+!   bigger.  In the same vein, for very conductive hosts, the cells should be
+!   made smaller but the mesh can be contracted due to increased attenuation.
+!
+!   Minimal mesh design to achieve good accuracy and comparatively short
+!   computation times remains very much an art guided by expoerience.
+!
+!
+!===========================================================================!
+!                                                                           !
+!                            Geometry Conventions                           !
+!                                                                           !
+!===========================================================================!
+!
+!
+!   In time domain, the source coordinates consist of the transmitter easting,
+!   northing and altitude.  For frequency-domain HEM systems, the source
+!   location is taken as the transmitter-receiver midpoint.
+!
+!   The mesh coordinates are entered in terms of horizontal distance (X) and
+!   elevation (negative downwards).  The mesh is assumed to lie under the flight
+!   path.  In order to tie the aircraft positions to the 2D mesh, the easting
+!   and northing of the top left-most node of the user-defined mesh must be
+!   specified in ArjunAir.cfl.  The "3D locations" of model produced by
+!   ArjunAir inversion will be computed by rotating the X (transverse strike)
+!   mesh coordinates into the bearing of the flight path.
+!
+!
+!===========================================================================!
+!                                                                           !
+!                     Time-Domain Waveform Sign Convention                  !
+!                                                                           !
+!===========================================================================!
+!
+!
+!   If the user specifies waveform excitation as either the transmitter
+!   current or primary B at the receiver, the program assumes that current
+!   or magnetic field will start at 0 or some low value, and rise to a
+!   positive maximum before going to zero or oscillating about zero with
+!   small magnitudes. In this case, dI/dt will be computed using the
+!   negative I or B so that the early off-time response is positive for
+!   vertical fields.
+!
+!   If the user specifies the excitation waveform as dB/dt at the receiver,
+!   the program assumes that the response will rise to a positive maximum
+!   followed by a negative maximum before oscillating about zero with
+!   smaller amplitudes. In this case dI/dt is derived by reversing the sign
+!   of the input primary dB/dt and dividing by the geometric coupling
+!   factor. Again, this procedure is designed so that the early off-time
+!   response is positive for vertical fields.
+!
+!
+!===========================================================================!
+!                                                                           !
+!                             File Conventions                              !
+!                                                                           !
+!===========================================================================!
+!
+!
+!   The input control data must be read from ArjunAir.cfl, which is assigned to 
+!   logical unit 3.
+!
+!   The data to be inverted, along with weighting and similar information, must
+!   be read from ArjunAir.inv which is assigned to logical unit 13. 
+!   The format of ArjunAir.inv is identical to that of LeroiAir.inv, SamAir.inv 
+!   and Airbeo.inv to enable ease of portability between inversion programs.
+!
+!   Frequency-domain output data is written to ArjunAir.frq and assigned to 
+!   logical unit 7.  This is useful for the restart option that enables different 
+!   time-domain waveforms and receiver window options to be tested without 
+!   having to repeat the explicit model computations.  Note that this option
+!   requires that the model and AEM geometry and locations be unchanged.
+!
+!   The complete output data file including input variable assignment for both 
+!   forward modelling and inversion is written to ArjunAir.out and assigned to
+!   logical unit number 4.
+!
+!   Messages about data or runtime errors are now written to the file 
+!   ArjunAir.log and assigned to logical unit 9.
+!
+!   For plotting forward modelling results, succinct output data is written to 
+!   ArjunAir.mf1 and assigned to logical unit 14.
+!
+!   For inversion plotting and imaging, succinct output data is written to 
+!   ArjunAir.mv1 and assigned to logical unit 14.
+!
+!
+!     UNIT #   UNIT ID      FILE ID           FUNCTION
+!     ------   -------      -------           --------
+!       3        NR       ArjunAir.cfl    Input control file
+!       13       NRI      ArjunAir.inv    Inversion data 
+!       4        NW       ArjunAir.out    Complete output description
+!       7        ND       ArjunAir.frq    Frequency-domain data for restart option
+!       8        NS       ArjunAir.sty    Frequency-domain sensitivity during inversion
+!       9        NLG      ArjunAir.log    Runtime and data error messages
+!       10       NM       ArjunAir.res    Element resistivity
+!       14       NWI      ArjunAir.mf1    Output data from forward modelling in plot format
+!       14       NWI      ArjunAir.mv1    Output data from inversion in plot format
+!
+!
+!===========================================================================!
+!                                                                           !
+!              Description of data records for ARJUNAIR.CFL                 !
+!                                                                           !
+!===========================================================================!
+!
+!
+!  All records are in list directed (free) format except for the TITLE
+!  in RECORD 1.
+!
+!  NOTE:  All distances and locations are to be specified in metres.
+!         All angles are to be specified in degrees.
+!
+!----------------------------------------------------------------------------
+!
+!
+!**  RECORD 1:  TITLE - up to 120 characters.
+!
+!**  RECORD 2:  TDFD, DO3D, PRFL, ISTOP
+!
+!      TDFD = 1 => time-domain modelling - STANDARD OPTION
+!           = 2 => frequency-domain modelling
+!
+!           = 0 => time-domain modelling - USER CONTROL OPTION
+!
+!         The default spectrum is between 1 Kz and 100 KHz. at 6 PPD (points per decade) 
+!         above 10 Hz and 3 PPD below.  The upper frequency limit is based on skin depth 
+!         in a discretised target
+!         
+!         The time domain transformation first splines the data over the explicit 
+!         spectrum and than extrapolates to DC.  A fast Hankel transform is used to
+!         compute the raw time-domain response out to 5 full cycles to account for
+!         previous pulses in conductive environments.  That is then folded back into 
+!         the single pulse response and convolved with the input signal. 
+!
+!         Numerical experiments have indicated that 6 points per decade is adequate 
+!         frequency discretisation, even at the high end.  Moreover, for perfect 
+!         frequency-domain data, only 3 frequencies are required from 1 to 10 Hz to 
+!         maintain an accuracy of better than .1 percent for the range of models studied.  
+!         This means that 28 frequencies are needed for the 1Hz to 100kHz range.  
+!           
+!         In many cases one could achieve the same accuracy with fewer frequency-domain
+!         computations.  The default spectrum can be over-ridden by setting TDFD = 0 in 
+!         which case the user needs to specify the minimum and maximum frequencies plus 
+!         points per decade in RECORD 2.1
+!  
+!  
+!      DO3D < 0  INVERSION  In this case, NPLATE = 0 is not allowed.
+!      -------------------------------------------------------------
+!        
+!           = -1 : the fitting error and sensitivity matrix are normalised
+!                  point by point by the averaged field and model data for
+!                  each survey & channel. This was the only inversion 
+!                  option for versions prior to 5.4.0.  
+!                  This point normalisation option is reported as: 
+!                  symmetric point norm or P-norm rms error.
+!        
+!           = -2 : for each channel or frequency, the fitting error and 
+!                  sensitivity matrix are normalised by the L1 norm of 
+!                  all survey data for that channel.  
+!                  Reported as: survey norm or S-norm rms error
+!        
+!      DO3D =  1, 2 or 0 for MODELLING
+!
+!      DO3D =  1  computes response of 3-D heterogeneities and prints
+!                 voltages as measured by receivers.
+!
+!           =  2  (time-domain only)
+!                 instead of computing the frequency-domain responses
+!                 (95-99 percent of ArjunAir usual computation time) use
+!                 previously computed frequency-domain responses contained
+!                 in file ArjunAir.frq to calculate 3-D time-domain responses.
+!
+!           =  0  compute layered earth model only
+!
+!       PRFL =  1 prints response in profile mode using the default units and
+!                 line tag.  Each column contains the response at all stations
+!                 for a channel or frequency.
+!
+!            =  2 prints responses in temporal or frequency mode, using the
+!                 default units and line tag.  Each column contains the
+!                 responses for a single position for all frequencies (TDFD=2)
+!                 or delay times (TDFD=1).
+!
+!       ISTOP = 0  read the input data and run the specified models.
+!             = 1  read the input data, print the model description
+!                  and STOP so that the model description can be verified.
+!
+!            REMEMBER to change ISTOP to 0 once the models have been verified.
+!
+!              ________________________________________________
+!              NOTE ON DO3D for TIME-DOMAIN modelling
+!              ------------------------------------------------
+!
+!    Each time ArjunAir is run with DO3D = 1, a file called ArjunAir.frq 
+!    is created on logical unit ND = 7.  ArjunAir reads this file to 
+!    produce the time-domain responses.
+!  
+!    Setting DO3D = 2 allows the user to test different time-domain
+!    systems (with the same model and Tx-Rx geometry of course) in a
+!    tiny fraction of the time required to rerun the whole model.
+!  _____________________________________________________________________
+!
+!  RECORDS 2.1, 3, 4, 5, 6, 7 & 8 for TIME-DOMAIN AEM SYSTEM INFORMATION  (ISW > 0)
+!  ---------------------------------------------------------------------
+!
+!------------------------------------------------------------------------------------------
+!    only if TDFD = 0
+!**  RECORD 2.1:  MIN_FREQ, MAX_FREQ, IPPD
+!
+!       MIN_FREQ - Lowest frequency for time-domain transform
+!       MAX_FREQ - Highest frequency for time-domain transform
+!
+!           IPPD =  0 : 3 points per decade will be used between MIN_FREQ and 10 KHz
+!                       6 points per decade will be used between 10 KHz and MAX_FREQ
+!                =  3 :  3 points per decade will be used between MIN_FREQ and MAX_FREQ
+!                =  6 :  6 points per decade will be used between MIN_FREQ and MAX_FREQ
+!                = 12 : 12 points per decade will be used between MIN_FREQ and MAX_FREQ
+!
+!      The frequency range is chosen as a compromise between accuracy and computation time.
+!      The default TDFD = 1 is overly generous and often by using a smaller frequency set,
+!      one can achieve accurate results in less time - especially for inversion.
+!
+!------------------------------------------------------------------------------------------
+!  
+!   The user specifies the waveform for 1/2 cycle ONLY.  The program
+!   will then fill in the other half as the negative of the first half.
+!   Any non-negative off-time value can be specified.
+!
+!**  RECORD 3:  ISW, NSX, STEP, UNITS, NCHNL, KRXW, OFFTIME
+!
+!      ISW =  1 =>  RECORD 4 will contain a transmitter current waveform in amps
+!      ISW = -1 =>  Aerotem triangular current input with on-time channels
+!
+!      ISW =  4 =>  Step B system where the Tx current waveform is a
+!                   bipolar square wave (no off-time) whose frequency
+!                   will be read in RECORD 4.  Output is B in femtoteslas.
+!
+!                   For ISW = 4, set OFFTIME = 0  and NSX = 1
+!
+!                   Towed Bird ONLY options
+!                   ------------------------
+!       ISW = 10  => RECORD 4 will contain the horizontal IN-LINE dB/dt receiver
+!                    calibration waveform in dB/dt UNITS
+!
+!       ISW = 11 =>  RECORD 4 will contain the horizontal IN-LINE B receiver
+!                    calibration waveform in B UNITS.
+!
+!       ISW = 30 =>  RECORD 4 will contain the VERTICAL dB/dt receiver
+!                    calibration waveform in dB/dt UNITS
+!
+!       ISW = 31 =>  RECORD 4 will contain the VERTICAL B receiver
+!                    calibration waveform in B UNITS.
+!
+!                   Central loop ONLY options
+!                   -------------------------
+!       ISW = 130 =>  RECORD 4 will contain the VERTICAL dB/dt receiver
+!                     calibration waveform in dB/dt UNITS
+!       ISW = 131 =>  RECORD 4 will contain the VERTICAL B receiver
+!                     calibration waveform in B UNITS.
+!
+!            Geotem / Questem Stripping Option
+!            ---------------------------------
+!
+!            Geotem & Questem data are processed by using an algorithm to strip
+!            primary field and bird motion from the output waveform.  Users
+!            have the option to apply this algorithm to ArjunAir model output.
+!            This can be done by specifying ISW as a negative integer for
+!            receiver waveform options.
+!
+!            In other words, setting ISW = -10, -11, -30 or -31 instead of
+!            10, 11, 30 or 31 respectively will produce stripped output.
+!
+!
+!      STEP = O =>  Compute dB/dt in nanovolts per unit area  (nV/m^2)
+!                    (same as nanoteslas per second (nT/s) )
+!
+!           = 1 =>  Compute B field in picoteslas (pT)
+!
+!      UNITS apply to  - waveform input except for ISW = 1
+!                      - un-normalised time-domain model output
+!                      - un-normalised time-domain data to be inverted
+!
+!                    STEP=0   STEP=1
+!                    dB/dt      B
+!                    -----    ------
+!      UNITS = 1     nT/s       nT
+!              2     pT/s       pT
+!              3     fT/s       fT
+!
+!      NCHNL - number of receiver channels
+!
+!      NSX - number of digitised points in waveform including endpoints
+!
+!      KRXW = 1 => receiver channels will be read in terms of start and end
+!                  times in ms.
+!      KRXW = 2 => receiver channels will be read in terms of midpoints and
+!                  channel widths.
+!
+!      OFFTIME - time (milliseconds) between end of one pulse and the start of
+!                the next pulse (of opposite sign) since a bipolar waveform is
+!                assumed.  For systems which have a signal which is always on,
+!                OFFTIME = 0.
+!
+!
+!**  RECORD 4  for ISW /= 4:  (TXON(J), WAVEFORM(J), J = 1,NSX)
+!              -------------
+!
+!      TXON(J) = digitised time (in milliseconds)
+!                In most cases, TXON(1) = 0, TXON(NSX) = pulse on-time
+!
+!      WAVEFORM(J) = transmitter current (in amps) at time TXON(J) if ISW = 1
+!                  = vertical dB/dt receiver waveform if ISW = 30 or 130
+!                  = vertical B receiver waveform if ISW = 31 or 131
+!                  = horizontal in-line dB/dt receiver waveform if ISW = 10
+!                  = horizontal in-line B receiver waveform if ISW = 11
+!
+!**  RECORD 4  for ISW = 4 ONLY:  FREQ, TXAMPL
+!              ----------------
+!      FREQ = frequency of bipolar square wave
+!      TXAMPL = peak to peak current amplitude
+!
+!
+!         In RECORDS 5 (& 6), the receiver windows can be specified in terms of
+!         start & end times if KRXW = 1; or centres & widths if KRXW = 2.
+!
+!   If KRXW = 1, Specify start and end times (in ms) of receiver windows.
+!                   (measured from start of signal turn on.)
+!   ---------------------------------------------------------------------
+!**  RECORD 5:  (TOPN(J), TCLS(J), J=1, NCHNL)
+!
+!         No RECORD 6 if KRXW = 2!  Go to RECORD 7
+!   ---------------------------------------------------------------------
+!
+!   If KRXW = 2,  Specify centres and widths of receiver windows.
+!   ------------------------------------------------------------
+!**  RECORD 5:  (TMS(J), J=1,NCHNL) - centre of receiver window gates in ms.
+!                                     measured from start of signal turn on.
+!
+!**  RECORD 6:  (WIDTH(J), J=1,NCHNL)  -  width of Rx window gates in ms.
+!
+!
+!**  RECORD 7:  TXCLN, CMP, KPPM
+!
+!         TXCLN - angle in degrees that transmitter dipole axis makes
+!                 with the vertical for level flight.
+!                 TXDIP = 0 for a horizontal loop in level flight.
+!                 TXCLN > 0 if the front of the loop is above the rear of the loop
+!
+!
+!    INVERSION:
+!    ---------
+!         CMP = 11 => invert on horizontal in-line component only
+!             = 13 => invert on vertical component only
+!             = 2  => joint inversion on vertical & horizontal in-line components
+!             = 3  => invert on all 3 components
+!             = 4  => invert on total field
+!
+!    MODELLING
+!    ---------
+!       CMP = 11 => print horizontal in-line component only
+!           = 13 => print vertical component only
+!           = 2  => print vertical & horizontal in-line components
+!           = 3  => print all three components
+!
+!      KPPM = 0  => No normalisation (automatic if ISW = 4)
+!
+!      KPPM > 0 => normalisation based on maximum dI/dt response for dB/dt output.
+!                  In this case, an entry for KPPF in RECORD 7.1 is necessary.
+!                  ---------------------------------------------------------------
+!
+!      KPPM = 1   => All components are normalised to in-line primary field
+!      KPPM = 3   => All components are normalised to vertical primary field
+!      KPPM = 123 => Vertical component normalised to the vertical primary &
+!                    In-line component to the in-line primary
+!                    Transverse component to the transverse primary
+!                     (For null coupling, total field is used.)
+!
+!      KPPM = 4 =>   all components are normalised to total primary field
+!
+!      -------------------------
+!      only if KPPM > 0
+!**    RECORD 7.1:  NPPF
+!      -------------------------
+!
+!           NPPF = 1 => normalisation is in percent (parts per hundred)
+!                = 2 => normalisation in parts per thousand
+!                = 3 => normalisation in parts per million
+!                = 4 => normalisation in parts per billion
+!
+!      -------------------------
+!      only if ISW = 1 or ISW > 100
+!**    RECORD 7.2:  TXAREA, NTRN
+!      -------------------------
+!
+!      TXAREA - transmitter loop area (sq. metres)
+!        NTRN - number of transmitter loop turns
+!
+!      TXAREA & NTRN need be specified ONLY for ISW = 1 or ISW > 100,
+!                    because the program ignores them for all other ISW options.
+!
+!**  RECORDS 8: ZRX0, XRX0, YRX0
+!
+!      ZRX0 - initial vertical offset of RX J;              below = positive
+!      XRX0 - initial in-line horizontal offset of RX J;    behind = positive
+!      YRX0 - initial transverse horizontal offset of RX J; left = positive.
+!
+!             These are the high altitude calibration offsets.
+!             If SURVEY < 3 in RECORD 9, these offsets are used for each station
+!
+!
+!     DATA ENTRY CONTINUES WITH FLIGHT PATH SPECIFICATION IN RECORD 9
+!
+! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!  RECORDS 3 & 4 for FREQUENCY-DOMAIN AEM SYSTEM INFORMATION
+!  -------------------------------------------------------------
+!
+!**  RECORD 3:  NFREQ, CMP, NPPF
+!
+!      NFREQ - number of frequencies
+!
+!    INVERSION:   data must be in normalised form either in PPM, PPB, PPT or percent
+!    ---------    Invert on single component response in direction of
+!                 transmitter orientation; eg co-planar or co-axial.
+!
+!      CMP = 1 => Transmitter dipole axis azimuth is oriented along flight path
+!                 Transmitter dipole axis inclinations are specified in RECORD 5
+!
+!      CMP = -1 for VCPB (vertical co-planar broadside array)
+!               Transmitter dipole axis azimuth is 90 degrees to flight line
+!               Transmitter dipole axis inclination is fixed at 90 degrees
+!               regardless of RECORD 5
+!
+!
+!    MODELLING
+!    ---------
+!      CMP = 1 or -1 => compute single component response in direction of
+!                       transmitter orientation; eg co-planar or co-axial.
+!                       Use CMP = -1 only for VCBB array
+!          = 2 => compute vertical and horizontal in-line response.
+!          = 3 => compute 3 component response.
+!
+!           If CMP = 1, output is in normalised units specified by NPPF
+!           If CMP > 1, output is in picoTeslas
+!
+!
+!     NPPF = 1 => normalisation is in percent (parts per hundred)
+!          = 2 => normalisation in parts per thousand
+!          = 3 => normalisation in parts per million
+!          = 4 => normalisation in parts per billion
+!
+!
+!**  RECORDS 4: (FREQ(J), ZRX(J), XRX(J), YRX(J), TXCLN(J), J = 1, NFRQ)
+!            (enter a separate record for each of the NFRQ offsets in metres
+!
+!      FREQ(J) - frequency in Hz
+!
+!      TXCLN(J) - inclination angle in degrees that transmitter dipole axis makes
+!                 with the vertical.
+!                 TXCLN = 0 for a horizontal loop in level flight.
+!                 TXCLN is positive if the front of the loop is
+!                       above the rear of the loop
+!
+!      If CMP = -1, the default TXCLN = 90.  In this case, entries for
+!      TXCLN in RECORD 4 are ignored and needn't be specified.
+!
+!      ZRX(J) - vertical offset of RX J;              below = positive
+!      XRX(J) - in-line horizontal offset of RX J;    behind = positive
+!      YRX(J) - transverse horizontal offset of RX J; left = positive.
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!----------------------------------------------------------------------------
+!
+!  FLIGHT PATH INFORMATION
+!  =======================
+!
+!  RECORD 9.1 and 9.2 are used only for forward modelling, DO3D = 0 or 1.
+!
+!
+!    INVERSION:
+!    ----------
+!
+!  For inversion, make a single entry for RECORD 9.0 and go on to RECORD 10.
+!
+!
+!**  RECORD 9.0: NPASS
+!
+!      Only for inversion - NPASS should be set to 0 or 1.
+!
+!      NPASS > 1 will the cause program to ignore the next NPASS records.
+!
+!
+!    FORWARD MODELLING (DO3D = 0, 1, or 2):
+!    --------------------------------------
+!
+!
+!**  RECORD 9.0:  NSTAT, SURVEY, BAROMTRC
+!
+!      NSTAT  - Number of transmitter positions for single line 
+!               NSTAT must be > 1
+!
+!      SURVEY = 2 => Variable altitude & course but constant Tx-Rx geometry.
+!
+!             = 3 => Variable altitude, course, transmitter pitch
+!                    and receiver offset (time-domain only).
+!
+!     BAROMTRC = 0 => Altitudes are ground clearance in metres.
+!
+!              = 1 => Altitudes are either GPS or barometric; ie, metres above sea level.
+!
+!
+!   Variable course and altitude; NSTAT records to follow):
+!   -------------------------------------------------------
+!
+!     Enter  RECORD 9.J, J = 1,NSTAT - i.e., one for each station:
+!
+!   If SURVEY = 2
+!**  RECORD 9.J:  ALINE, EAST(J), NORTH(J), ALT(J)
+!
+!
+!   If SURVEY = 3 (Time-domain only):
+!**  RECORD 9.J:  ALINE, EAST(J), NORTH(J), ALT(J), TXCLN(J), ZRX(J), XRX(J), YRX(J)
+!
+!
+!      ALINE    - line number
+!      EAST(J)  - East coordinate of transmitter at station J.
+!      NORTH(J) - North coordinate of transmitter at station J.
+!
+!      --------------------------------------------------------------------
+!      In frequency domain, these are interpreted as the Tx-Rx midpoint.
+!      The Tx position for all frequencies are based on the offset for
+!      the first frequency.  The Rx position for each frequency is computed
+!      using the offset for that frequency relative to the Tx position for
+!      frequency 1.
+!      --------------------------------------------------------------------
+!
+!      ALT(J) - Altitude of transmitter at station J.
+!      ZRX(J) - Vertical offset of receiver at station J,
+!               below = positive.
+!
+!      XRX(J) - In-line horizontal offset of receiver at station J,
+!               behind = positive.
+!      YRX(J) - Transverse horizontal offset of receiver at station J,
+!               Left = positive.
+!
+!
+!===========================================================================!
+!
+!
+!                  LITHOLOGY AND MODEL STRUCTURE FOR ARJUNAIR
+!                  ------------------------------------------
+!
+!
+!   The heterogeneous domain must be divided into a mesh that is defined
+!   by the user. The following records set the mesh size reference.
+!
+!** RECORD 10:  NZ, NX, NLITH, EASTD1, NORTHD1
+!
+!
+!     NZ - Number of horizontal rows of domain nodes
+!     NX - Number of vertical columns of domain nodes
+!
+!     NLITH - Number of distinct lithological units.
+!
+!             If NLITH is negative, ArjunAir reads the element resistivities
+!             from ArjunAir.res (logical unit NM) and internally over-writes
+!             the resistivity defined by each element's lithology with those
+!             read from ArjunAir.res.
+!  
+!     EASTD1  = east coordinate of the top left node of user specified mesh.
+!     NORTHD1 = north coordinate of the top left node of user specified mesh.
+!
+!*********************************************************************************
+!                       CRUCIAL NOTE
+!                       ------------
+!
+!  This version of ArjunAir defines positive X as being along the flight direction.
+!  This refers to mesh coordinates which are taken as being directly below the 
+!  flight path.  Therefore, positive direction along the mesh must correlate to 
+!  positive distance along the flight path.
+!  
+!  Example 1: If the flight path were east to west, then the mesh would similarly 
+!             run west to east and the left-most top node, (EASTD1,NORTHD1) would
+!             also be the western-most mesh point.
+!  
+!  Example 2: If the flight path were north to south, then the mesh would run 
+!             north to south and the left-most top node, (EASTD1,NORTHD1) would 
+!             be the northern-most mesh point.
+!  
+!*********************************************************************************
+!
+!
+!    Define lithologies:
+!    -------------------
+!
+!
+!**  RECORD 11.1:  RES(1), SIG_T(1), RMU(1), REPS(1), CHRG(1), CTAU(1), CFREQ(1)
+!**  RECORD 11.2:  RES(2), SIG_T(2), RMU(2), REPS(2), CHRG(2), CTAU(2), CFREQ(2)
+!        :           :        :        :        :        :        :        :
+!        :           :        :        :        :        :        :        :
+!**  RECORD 11.N:  RES(N), SIG_T(N), RMU(N), REPS(N), CHRG(N), CTAU(N), CFREQ(N)
+!
+!
+!      N = NLITH; Number of distinct lithological units.
+!
+!      RES(I) - cell resistivity
+!
+!      SIG_T(I) - NOT USED IN ARJUNAIR: Conductance (conductivity-thickness
+!                 product). A value for SIG_T must be entered even though it
+!                 isn't used. 
+!
+!      RMU(I) - Relative magnetic permeability for LITH_INDEX(I).
+!      REPS(I) - Relative dielectric constant (permittivity for LITH_INDEX(I).
+!      CHRG(I) - Cole-Cole chargeability for LITH_INDEX(I).
+!      CTAU(I) - Cole-Cole time constant for LITH_INDEX(I).
+!      CFREQ(I) - Cole-Cole frequency constant for LITH_INDEX(I).
+!
+!          Default values: RMU = 1, REPS = 1, CHRG = 0, CTAU = 0, CFREQ = 1.
+!
+!          The default means no magnetic permeability contrast (MU = 4 PI * 10^(-7)),
+!          no dielectric constant contrast (EPSILON = 8.854215E-12) and no IP effects
+!          (no Cole-Cole).
+!
+!
+!    Node locations:
+!    ---------------
+!
+!    Nodes and associated lithologies are read one row at a time from the top
+!    (surface) to the bottom. The lithology of each four cornered cell is
+!    associated with the top, western node defining that cell.
+!
+!    There are NZ * NX records to be read in below; one for each permutation
+!    of J and K.
+!
+!
+!**  RECORDS 12.(J,K):  K, J, ZLOC, XLOC, LITH
+!
+!
+!      1 <= K <= NZ is the node index increasing from surface to bottom.
+!      1 <= J <= NX is the node index increasing from left to right.
+!
+!      ZLOC(J,K) = The relative level of node (J,K) in metres.
+!                  For fixed J, it must increase negatively with
+!                  increasing K.
+!
+!      XLOC(J,K) = The horizontal coordinate of node (J,K) in metres.
+!                  For fixed K, it must increase with increasing J.
+!
+!        Each cell (or mesh element) is defined by its four corner nodes.
+!        Each cell is identified by the indices of the node of its top,
+!        western corner.
+!
+!        Thus LITH (J,K) will be the lithology index of the cell
+!        defined by nodes:
+!
+!          (K, J),   (K+1, J),   (K+1, J),   (K+1, J+1)
+!
+!        LITH is not read if J = NX or if K = NZ
+!
+!
+!===========================================================================!
+!                                                                           !
+!     CONTROL FILE DESCRIPTION FINISHED FOR FORWARD MODELLING OPTIONS       !
+!                                (DO3D > 0)                                 !
+!                                                                           !
+!                          CONTINUE FOR INVERSION                           !
+!                                (DO3D = -1)                                !
+!                                                                           !
+!===========================================================================!
+!
+!
+!                       INVERSION INPUT FOR ARJUNAIR
+!                       ----------------------------
+!
+!   INVERSION CONTROLS
+!   ==================
+!
+!** RECORD 16: MAXITS, CNVRG, NFIX, MV1PRT, OUTPRT
+!
+!      MAXITS - The inversion will run for ITS iterations unless one of the two
+!               convergence criteria designated by CNVRG is satisfied.
+!
+!               (Suggested value: MAXITS = 90).
+!
+!      CNVRG = 1 => Iterations will proceed unless the error can no
+!                   longer be reduced.
+!
+!            = 2 => Iterations will not proceed any further if the
+!                   RMS (root mean square) error is less than a user
+!                   specified percent (PCTCNV in RECORD 16.1).
+!
+!      NFIX - The number of parameters that will be constrained. If all
+!             parameters are free to vary without restriction, NFIX = 0.
+!
+!             If NFIX > 0, NFIX records describing the constraint must be
+!             entered as RECORDS 16.2.
+!
+!      CNVRG = 1 => iterations will proceed using the stopping criteria above
+!                   and the default derivative step, starting with 6 percent
+!                   and testing 3 percent after RSVT reaches 0.01.
+!
+!            = 2 => iterations will not proceed any further if the
+!                   RMS (root mean square) error is less than a user
+!                   specified percent (PCTCNV in RECORD 16.1).
+!                   Uses the default derivative step.
+!
+!            = 3 => reverse the default (start with 3 percent and test 6 percent)
+!
+!            = 4 => set a fixed numerical derivative step (override default)
+!
+!      NFIX - the number of parameters that will be constrained.  If all
+!             parameters are free to vary without restriction, NFIX = 0
+!
+!             If NFIX > 0, NFIX records describing the constraint must be
+!             entered as RECORDS 16.2
+!
+!      MV1PRT refers to the output print level in Airbeo.mv1.
+!
+!      OUTPRT refers to the output print level in Airbeo.out.
+!
+!            =  0  No output DURING inversion. The final model set AFTER inversion,
+!                  but NOT the final model data, is written to output files.
+!            
+!            =  1  as above plus final model data.
+!            
+!            =  2  as above plus intermediate model sets after each iteration.
+!            
+!            =  3  as above plus intermediate model data after each iteration.
+!
+!    Only if CNVRG = 2:
+!    ------------------
+!
+!**  RECORD 16.1: PCTCNV
+!
+!      PCTCNV - terminate inversion if SQRT {SUMSQ / WSUM } < PCTCNV.
+!
+!
+!    Only if NFIX > 0:
+!    -----------------
+!
+!**  RECORD 16.2: CTYPE, LITH_INDX, KPAR, ELAS(KPAR), LBND(KPAR), UBND(KPAR)
+!
+!     CTYPE = 1 -> parameter is fixed to a priori model value. Only LITH_INDX and
+!                  KPAR need to be defined.
+!
+!           = 2 -> frictional restraint. Only LITH_INDX, KPAR and ELAS(KPAR) need
+!                  to be defined.
+!
+!           = 3 -> buffered boundaries. All parameters above must be defined.
+!
+!     LITH_INDX - lithology number for which the resistivity will be constrained
+!                 (with respect to the order of the lithologies read in the control
+!                 file).
+!
+!     KPAR = 1 -> lithology resistivity.
+
+!     ELAS(KPAR) - Elasticity of resistivity (0 < ELAS < 1) for lithology LITH_INDX.
+!     LBND(KPAR) - Lower bound of resitivity for lithology LITH_INDX.
+!     UBND(KPAR) - Upper bound of resistivity for lithology LITH_INDX.
+!
+!       Note:
+!       -----
+!
+!       After each iteration, the inversion will compute a proposed update for
+!       each model parameter, DELPAR.
+!
+!       For CTYPE = 1 where the model parameter NM is associated with LITH_INDX, then
+!       DELPAR(NM) = 0.
+!
+!       For CTYPE = 2 where the model parameter NM is associated with LITH_INDX, then
+!       DELPAR(NM)' = ELAS * DELPAR(NM). This serves as a frictional restraint or rubber
+!       band preventing a parameter from making the full change suggested by the inversion
+!       algorithm. It used when a parameter value is thought to be known but allows more
+!       latitude than parameter fixation.
+!
+!       For CTYPE = 3 where the model parameter NM is associated with LITH_INDX, then
+!       DELPAR(NM)' = ELAS * DELPAR(NM) provided that LBND =< DELPAR(NM)' =< UBND. If it
+!       exceeds either bound, it is set to that bound.
+!
+!
+!   END OF ARJUNAIR.CFL
+!
+!
+!===========================================================================!
+!                                                                           !
+!              Description of data records for ARJUNAIR.INV                 !
+!                                                                           !
+!===========================================================================!
+!
+!   Note:
+!   -----
+!
+!   The format of ArjunAir.inv is identical to LeroiAir.inv, SamAir.inv and
+!   Airbeo.inv to enable ease of portability between inversion programs.
+!
+!   Any number of comment lines can be inserted ONLY at the beginning of
+!   ArjunAir.inv. These must be designated by making the first character
+!   either / or \ as the first characters of the line.
+!
+!   Blank lines or any other line whose first character is NOT / or \
+!   signifies the start of data records.
+!
+!
+!---------------------------------------------------------------------------!
+!
+!
+!   DATA WEIGHTING
+!   ==============
+!
+!   In what follows, the channel reference term PCHNL refers to each
+!   component for each frequency or time-domain channel.
+!
+!   NPCHNL = the number of PCHNLs.
+!
+!   For example if there are 2 components of 10 CHANNEL time-domain data,
+!   NPCHNL = 20. For the 5 frequency DIGHEM system NPCHNL = 10 corresponding
+!   to 5 in-phase and 5 quadrature data
+!
+!     Frequency-domain:
+!     -----------------
+!
+!     Channels are odered from the lowest to the highest frequency.
+!
+!     PCHNL = 1 to NFRQ for the in-phase and
+!           = NFRQ+1 to 2*NFRQ for the quadrature.
+!
+!     Time-domain:
+!     ------------
+!
+!     Regardless of the order in which the data is read in, for weigting
+!     PCHNL = 1 to NCHNL refer to
+!                  Vertical response if CMP = 13, 2 or 3
+!                  In-Line response of CMP = 11
+!                  Transverse response of CMP = 12
+!           = NCHNL+1 to 2*NCHNL refer to in-line response If CMP = 2
+!           = 2*NCHNL+1 to 3*NCHNL refer to transverse response of CMP = 3
+!
+!
+!**  RECORD 1: NSTAT, SURVEY, BAROMTRC, KCMP, ORDER
+!
+!      NSTAT  - number of stations to be read in from ArjunAir.inv.
+!
+!      SURVEY = 2 => variable altitude and course but constant Tx-Rx geometry.
+!      SURVEY = 3 => variable altitude, course, transmitter pitch and receiver
+!                    offset (time-domain only).
+!
+!      BAROMTRC = 0 => altitudes are ground clearance in metres.
+!               = 1 => altitudes are barometric; ie, metres above sea level.
+!
+!
+!      (time-domain)
+!      KCMP = 1   : only X (in-line component) data will be read in
+!           = 3   : only Z (vertical component) data will be read in
+!           = 13  : X data followed by Z data
+!           = 31  : Z data followed by X data
+!           = 123 : X data followed by Y data followed by Z data
+!           = 312 : Z data followed by X data followed by Y data
+!
+!      (time-domain)
+!      ORDER = 1 the first data component for all times is followed
+!                by the next data component for all times in the order
+!                specified by KCMP.  (for example X1 X2 Y1 Y2 Z1 Z2)
+!
+!            = 2 all of the data components for each channel are followed by
+!                all of the data components for the next channel in the order
+!                specified by KCMP   (for example X1 Y1 Z1 X2 Y2 Z2)
+!
+!
+!      Frequency-domain:
+!
+!      KCMP(1:NFRQ) : specify components for each frequency. These must be in the
+!                     order as the frequencies in SamAir.cfl
+!
+!                  1 : HCP - horizontal coplanar
+!                  2 : VCA - vertical coaxial
+!                  3 : VCP - vertical coplanar
+!                  4 : VCB - vertical coplanar broadside
+!
+!      Dighem example:       KCMP(1:5) = 1 2 2 1 1  for 5 frequencies starting from the lowest.
+!      GTK wingtip example:  KCMP(1:2) = 3 3        for 2 frequencies starting from the lowest.
+!
+!      Frequency-domain:
+!
+!      ORDER = 1122 : all inphase data will be followed by all quadrature data
+!            = 1212 : data consists of paired inphase and quadrature for each frequency
+!            = 2211 : all quadrature data will be followed by all inphase data
+!            = 2121 : data consists of paired quadrature and inphase for each frequency
+!
+!
+!**  RECORD 2: DATA_FLOOR
+!
+!      Any data value whose absolute magnitude is less than DATA_FLOOR will be
+!      weighted to zero.
+!
+!      For time-domain, only one value is required.
+!
+!      For frequency-domain, 2 * NFRQ values must be entered.
+!
+!      If KCMP = 12: The first NFRQ values refer to in-phase measurements for
+!                    each frequency followed by NFRQ values for each quadrature
+!                    measurement.
+!
+!      If KCMP = 21: The first NFRQ values refer to quadrature measurements for
+!                    each frequency followed by NFRQ values for each in-phase
+!                    measurement.
+!
+!      ArjunAir assumes that each group will start from the floor for the 
+!      lowest frequency and proceed sequentially to that for the highest.
+!
+!
+!**  RECORD 3: N0STAT, N0CHNL, N0PTS
+!
+!      N0STAT - Number of stations for which all the data will be weighted to zero.
+!
+!      N0CHNL - Number of PCHNLs for which all the data will be weighted to zero.
+!
+!      N0PTS  - Number of data points not covered by K0STAT and K0CHNL which will be
+!               weighted to zero.
+!
+!
+!    Only if N0STAT > 0:
+!    -------------------
+!
+!**  RECORD 3.1:  K0STAT(1:K0STAT) - Indices of stations for which all data
+!                                     will be weighted to 0.
+!
+!
+!    Only if N0CHNL > 0:
+!    -------------------
+!
+!**  RECORD 3.2:  K0CHNL(1:N0CHNL) - Indices of PCHNLs for which all data
+!                                     will be weighted to 0.
+!
+!
+!    Only if N0PTS > 0:
+!    ------------------
+!
+!**  RECORD 3.3:  (J0CH(I),J0ST(I)), I = 1,N0PTS)
+!
+!      PCHNL and station indices of individual points to be weighted to 0
+!      using the above PCHNL ordering convention.
+!
+!
+!   DATA ENTRY
+!   ==========
+!
+!   NSTAT records:
+!
+!   For SURVEY = 2:
+!   ---------------------
+!**  RECORD 4.J: ALINE, EAST(J), NORTH(J), ALT(J), DATA(1:NPCHNL, J)
+!
+!
+!   For SURVEY = 3 (time domain only):
+!   ---------------------------------
+!**  RECORD 4.J: ALINE, EAST(J), NORTH(J), ALT(J), TXCLN(J), ZRX(J), XRX(J), YRX(J), DATA(1:NPCHNL,J)
+!
+!      DATA(I,J) = datum of PCHNL I at station J
+!
+!      Note:
+!      -----
+!
+!      Unnormalised B data is in pT and unnormalised dB/dt data is in nT/s
+!      unless otherwise specified in RECORD 2.2.
+!
+!      For frequency-domain inversion or if KPPM > 0, normalised data are
+!      expressed in ppm unless otherwise specified using NPPF /= 3.
+!
+!      ZRX(J), XRX(J) = Vertical and inline offsets at station J.
+!
+!
+!   END OF ARJUNAIR.INV
+!
+!
+!===========================================================================!
