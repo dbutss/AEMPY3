@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 
-import aempy3
-
-# Check for setuptools package:
-
-try:
-    from setuptools import setup
-except ImportError:
-    setuptools = False
-    from distutils.core import setup
-else:
-    setuptools = True
+import aempy3.core1d as core1d
+#
+# # Check for setuptools package:
+#
+# try:
+#     from setuptools import setup
+# except ImportError:
+#     setuptools = False
+#     from distutils.core import setup
+# else:
+#     setuptools = True
 
 LONG_DESC = """
 aempy3 is an open source Python package for Airborne Electromagnetics (AEM)
@@ -41,27 +41,27 @@ setup_kwargs = {}
 # the default Python installation, which only has Distutils:
 
 # if setuptools is False:
-    # Different script specification style for ordinary Distutils:
-
-    setup_kwargs['scripts'] = [
-        s.split(' = ')[1].replace('.', '/').split(':')[0] + '.py' for s in
-        setup_kwargs['entry_points']['console_scripts']]
-    del setup_kwargs['entry_points']
-
-    # "You must explicitly list all packages in packages: the Distutils will not
-    # recursively scan your source tree looking for any directory with an
-    # __init__.py file"
-
-setup_kwargs['packages'] = [
-                            'aempy3',
-                            'aempy3.core',
-                            'aempy3.modules',
-                            'aempy3.scripts',
-                            'aempy3.docs',
-                            'aempy3.examples'
-]
-
-setup_kwargs['install_requires'] = ['numpy>=1.17',
+#     # Different script specification style for ordinary Distutils:
+#
+#     setup_kwargs['scripts'] = [
+#         s.split(' = ')[1].replace('.', '/').split(':')[0] + '.py' for s in
+#         setup_kwargs['entry_points']['console_scripts']]
+#     del setup_kwargs['entry_points']
+#
+#     # "You must explicitly list all packages in packages: the Distutils will not
+#     # recursively scan your source tree looking for any directory with an
+#     # __init__.py file"
+#
+# setup_kwargs['packages'] = ['aempy3',
+#                             'aempy3.core',
+#                             'aempy3.modules',
+#                             'aempy3.scripts',
+#                             'aempy3.docs',
+#                             'aempy3.examples'
+# ]
+#
+setup_kwargs['install_requires'] = ['setuptool>=42',
+                                     'numpy>=1.17',
                                      'scipy>=1.4',
                                      'matplotlib>=3,
                                      'pyyaml>=5',
