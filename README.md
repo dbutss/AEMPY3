@@ -32,6 +32,8 @@ Get your working copy via git from the command line:
 
 _git clone https://github.com/volkerrath/AEMPY3/_
 
+The scripts and jupyter notebooks are available in the subdirectory aempy3. 
+
 This version will run under Python up to 3.7 (3.8 not tested). To install it in an Linux environment (e.g. Ubuntu, SuSE), you need to the following:
 
 (1) Download the latest Anaconda or Miniconda version (https://www.anaconda.com/distribution/), and install by runing the downloaded bash script. 
