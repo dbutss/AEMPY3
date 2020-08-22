@@ -6,41 +6,37 @@ Please keep in mind that this is an experimental software, and may contain error
  
 This repository contains the following subdirectories:
 
- - 	**core**
+ - 	**core1d**
 	This directory contains the Fortran 90 source code for the computational
 	core run by the Python toolbox. Currently it contains wrappers for the two
 	systems used in Tellus: GTK4  and CGG Genesis. the numerics is derived from 
 	the AMIRA/CSIRO AirBeo software. Wrappers for GEOTEM are work in progress.
 	
- -	**doc**
+ -	**info**
  	Doumentation for the toolbox, and some useful documentation for python, 
  	including the most important extensions, numpy, scipy, and matplotlib 
  	
  -	**modules**
- 	Contains the modules aemprocs.py and invprocs.py, which are called from the 
+ 	Contains the modules aem.py, inv.py,  and mt.py which are called from the 
  	Python scripts run for different tasks of AEM inversion
  	
  - 	**scripts**
  	Contains the scripts  for preprocessing, visualization, and one-dimensional inversion of 
- 	AEM data
- 	
- - 	**tutorial**
- 	Contains several scripts and data demonstratinmg explaining the typical 
- 	work flow using the toolbox.      	 
+ 	AEM data, explaining the typical work flow using the toolbox.      	 
 
 Get your working copy via git from the command line:
 
 _git clone https://github.com/volkerrath/AEMPY3/_
 
-The scripts and jupyter notebooks are available in the subdirectory aempy3. 
+The scripts and jupyter notebooks are available in the subdirectory AEMPY3/aempy3. 
 
-This version will run under Python up to 3.7 (3.8 not tested). To install it in an Linux environment (e.g. Ubuntu, SuSE), you need to the following:
+This version will run under Python up to 3.7 (3.8 not yet tested). To install it in an Linux environment (e.g. Ubuntu, SuSE), you need to the following:
 
 (1) Download the latest Anaconda or Miniconda version (https://www.anaconda.com/distribution/), and install by runing the downloaded bash script. 
 
 (2) Create an appropriate conda environment (including the necessary prerequisites) by:
 
-_conda env create -f AEMPY3.yml_
+_conda env create -f AEMpy3.yml_
 
 (3) Activate this environment by:
 
